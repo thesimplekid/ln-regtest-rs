@@ -12,7 +12,7 @@ use fedimint_tonic_lnd::{
 };
 use tokio::{sync::Mutex, time::sleep};
 
-use crate::hex;
+use crate::{hex, InvoiceStatus};
 
 /// Lnd
 pub struct LndClient {
@@ -239,5 +239,78 @@ impl LndClient {
         }
 
         bail!("Time out exceded")
+    }
+
+    pub async fn check_incoming_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+        let invoice_request = fedimint_tonic_lnd::lnrpc::PaymentHash {
+            r_hash: hex::decode(payment_hash)?,
+            ..Default::default()
+        };
+
+        let invoice = self
+            .client
+            .lock()
+            .await
+            .lightning()
+            .lookup_invoice(fedimint_tonic_lnd::tonic::Request::new(invoice_request))
+            .await
+            .unwrap()
+            .into_inner();
+
+        match invoice.state {
+            // Open
+            0 => Ok(InvoiceStatus::Unpaid),
+            // Settled
+            1 => Ok(InvoiceStatus::Paid),
+            // Canceled
+            2 => Ok(InvoiceStatus::Unpaid),
+            // Accepted
+            3 => Ok(InvoiceStatus::Unpaid),
+            _ => bail!("Unkown state"),
+        }
+    }
+
+    pub async fn check_outgoing_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+        let invoice_request = fedimint_tonic_lnd::lnrpc::ListPaymentsRequest {
+            include_incomplete: true,
+            index_offset: 0,
+            max_payments: 1000,
+            reversed: false,
+            count_total_payments: false,
+        };
+
+        let invoices = self
+            .client
+            .lock()
+            .await
+            .lightning()
+            .list_payments(invoice_request)
+            .await
+            .unwrap()
+            .into_inner();
+
+        let invoice: Vec<&fedimint_tonic_lnd::lnrpc::Payment> = invoices
+            .payments
+            .iter()
+            .filter(|p| p.payment_hash == payment_hash)
+            .collect();
+
+        if invoice.len() != 1 {
+            bail!("Could not find invoice");
+        }
+
+        let invoice = invoice.first().expect("Checked len is one");
+
+        match invoice.status {
+            // Open
+            0 => Ok(InvoiceStatus::Unpaid),
+            // Settled
+            1 => Ok(InvoiceStatus::Paid),
+            // Canceled
+            2 => Ok(InvoiceStatus::Unpaid),
+            // Accepted
+            3 => Ok(InvoiceStatus::Unpaid),
+            _ => bail!("Unkown state"),
+        }
     }
 }

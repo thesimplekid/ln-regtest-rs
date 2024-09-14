@@ -7,10 +7,13 @@ use cln_rpc::{
     model::{
         requests::{
             ConnectRequest, FundchannelRequest, GetinfoRequest, InvoiceRequest,
-            ListchannelsRequest, ListfundsRequest, ListtransactionsRequest, NewaddrRequest,
-            PayRequest,
+            ListchannelsRequest, ListfundsRequest, ListinvoicesRequest, ListpaysRequest,
+            ListtransactionsRequest, NewaddrRequest, PayRequest,
         },
-        responses::{GetinfoResponse, ListchannelsResponse, ListfundsOutputsStatus},
+        responses::{
+            GetinfoResponse, ListchannelsResponse, ListfundsOutputsStatus,
+            ListinvoicesInvoicesStatus, ListpaysPaysStatus,
+        },
     },
     primitives::{Amount, AmountOrAll, AmountOrAny, PublicKey},
     ClnRpc,
@@ -18,7 +21,7 @@ use cln_rpc::{
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::sleep};
 
-use crate::hex;
+use crate::{hex, InvoiceStatus};
 
 /// Cln
 pub struct ClnClient {
@@ -334,6 +337,71 @@ impl ClnClient {
         }
 
         bail!("Time out exceded")
+    }
+
+    pub async fn check_incoming_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+        let mut cln_client = self.client.lock().await;
+
+        let cln_response = cln_client
+            .call(cln_rpc::Request::ListInvoices(ListinvoicesRequest {
+                payment_hash: Some(payment_hash),
+                label: None,
+                invstring: None,
+                offer_id: None,
+                index: None,
+                limit: None,
+                start: None,
+            }))
+            .await?;
+
+        match cln_response {
+            cln_rpc::Response::ListInvoices(invoice_response) => {
+                match invoice_response.invoices.first() {
+                    Some(invoice_response) => match invoice_response.status {
+                        ListinvoicesInvoicesStatus::UNPAID => Ok(InvoiceStatus::Unpaid),
+                        ListinvoicesInvoicesStatus::EXPIRED => Ok(InvoiceStatus::Expired),
+                        ListinvoicesInvoicesStatus::PAID => Ok(InvoiceStatus::Paid),
+                    },
+                    None => {
+                        bail!("Could not find invoice")
+                    }
+                }
+            }
+            _ => {
+                bail!("Wrong cln response")
+            }
+        }
+    }
+
+    pub async fn check_outgoing_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+        let mut cln_client = self.client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::ListPays(ListpaysRequest {
+                bolt11: None,
+                payment_hash: Some(payment_hash.parse()?),
+                status: None,
+            }))
+            .await?;
+
+        let state = match cln_response {
+            cln_rpc::Response::ListPays(pay_response) => {
+                let pay = pay_response.pays.first();
+
+                match pay {
+                    Some(pay) => match pay.status {
+                        ListpaysPaysStatus::COMPLETE => InvoiceStatus::Paid,
+                        ListpaysPaysStatus::PENDING => InvoiceStatus::Pending,
+                        ListpaysPaysStatus::FAILED => InvoiceStatus::Failed,
+                    },
+                    None => InvoiceStatus::Unpaid,
+                }
+            }
+            _ => {
+                bail!("Wrong cln response")
+            }
+        };
+
+        Ok(state)
     }
 }
 
