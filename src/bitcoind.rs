@@ -13,7 +13,7 @@ use std::{
 pub struct Bitcoind {
     rpc_user: String,
     rpc_password: String,
-    addr: PathBuf,
+    _addr: PathBuf,
     data_dir: PathBuf,
     child: Option<Child>,
     zmq_raw_block: String,
@@ -33,7 +33,7 @@ impl Bitcoind {
         Bitcoind {
             rpc_user,
             rpc_password,
-            addr,
+            _addr: addr,
             data_dir,
             child: None,
             zmq_raw_block,
@@ -43,6 +43,11 @@ impl Bitcoind {
 
     /// Start bitcoind
     pub fn start_bitcoind(&mut self) -> Result<()> {
+        println!("Starting btcd");
+
+        std::fs::create_dir_all(&self.data_dir).unwrap();
+        println!("created dir: {}", self.data_dir.display());
+
         let mut cmd = Command::new("bitcoind");
 
         cmd.arg("-regtest");
@@ -59,7 +64,7 @@ impl Bitcoind {
         // Send output to dev null
         cmd.stdout(Stdio::null());
 
-        let child = cmd.spawn()?;
+        let child = cmd.spawn().unwrap();
 
         self.child = Some(child);
 
@@ -81,5 +86,14 @@ impl Bitcoind {
         }
 
         Ok(())
+    }
+}
+
+impl Drop for Bitcoind {
+    fn drop(&mut self) {
+        tracing::info!("Droping bitcoind");
+        if let Err(err) = self.stop_bitcoind() {
+            tracing::error!("Could not stop bitcoind: {}", err);
+        }
     }
 }

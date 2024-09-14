@@ -23,6 +23,7 @@ use crate::hex;
 /// Cln
 pub struct ClnClient {
     client: Arc<Mutex<ClnRpc>>,
+    pub rpc_path: PathBuf,
 }
 
 impl ClnClient {
@@ -32,9 +33,10 @@ impl ClnClient {
 
         println!("rpc_path: {}", rpc_path.display());
 
-        let cln_client = cln_rpc::ClnRpc::new(rpc_path).await?;
+        let cln_client = cln_rpc::ClnRpc::new(&rpc_path).await?;
 
         Ok(Self {
+            rpc_path,
             client: Arc::new(Mutex::new(cln_client)),
         })
     }

@@ -85,3 +85,12 @@ impl Clnd {
         Ok(())
     }
 }
+
+impl Drop for Clnd {
+    fn drop(&mut self) {
+        tracing::info!("Droping clnd");
+        if let Err(err) = self.stop_clnd() {
+            tracing::error!("Could not stop clnd: {}", err);
+        }
+    }
+}

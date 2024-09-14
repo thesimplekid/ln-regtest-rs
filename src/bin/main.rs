@@ -10,6 +10,7 @@ use ln_regtest_rs::cln_client::ClnClient;
 use ln_regtest_rs::lnd::Lnd;
 use ln_regtest_rs::lnd_client::LndClient;
 use tempfile::tempdir;
+use tracing_subscriber::EnvFilter;
 
 fn create_wallet(bitcoind: &mut BitcoinClient) -> Result<()> {
     bitcoind.create_wallet().ok();
@@ -20,6 +21,15 @@ fn create_wallet(bitcoind: &mut BitcoinClient) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let default_filter = "debug";
+
+    let h2_filter = "h2=warn";
+    let hyper_filter = "hyper=warn";
+
+    let env_filter = EnvFilter::new(format!("{},{},{}", default_filter, h2_filter, hyper_filter));
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+
     let temp_dir = tempdir()?;
 
     let btc_dir = temp_dir.path().join("btc_one");
@@ -210,13 +220,6 @@ async fn main() -> Result<()> {
     cln_client.wait_channles_active().await?;
 
     println!("{}", channel_id);
-
-    println!("Stopping lnd");
-    lnd.stop_lnd()?;
-    println!("Stopping cln");
-    clnd.stop_clnd()?;
-    println!("Stopping btc");
-    bitcoind.stop_bitcoind()?;
 
     Ok(())
 }
