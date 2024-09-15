@@ -97,7 +97,7 @@ impl Bitcoind {
 
 impl Drop for Bitcoind {
     fn drop(&mut self) {
-        tracing::info!("Droping bitcoind");
+        tracing::info!("Dropping bitcoind");
         if let Err(err) = self.stop_bitcoind() {
             tracing::error!("Could not stop bitcoind: {}", err);
         }

@@ -123,7 +123,7 @@ impl Lnd {
 
 impl Drop for Lnd {
     fn drop(&mut self) {
-        tracing::info!("Droping lnd");
+        tracing::info!("Dropping lnd");
         if let Err(err) = self.stop_lnd() {
             tracing::error!("Could not stop lnd: {}", err);
         }

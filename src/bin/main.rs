@@ -127,7 +127,7 @@ async fn main() -> Result<()> {
     println!("CLN Address: {}", cln_one_address);
 
     bitcoin_client_spending.send_to_address(&cln_one_address, 3_000_000)?;
-    // CLN doesn't seem to see the funds unless 100 blocks are genrated
+    // CLN doesn't seem to see the funds unless 100 blocks are generated
     bitcoin_client_mining.generate_blocks(&mine_to_address, 100)?;
     cln_client.wait_chain_sync().await?;
 
@@ -217,7 +217,7 @@ async fn main() -> Result<()> {
         .await?;
     bitcoin_client_mining.generate_blocks(&mine_to_address, 10)?;
 
-    cln_client.wait_channles_active().await?;
+    cln_client.wait_channels_active().await?;
 
     println!("{}", channel_id);
 

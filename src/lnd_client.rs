@@ -222,7 +222,7 @@ impl LndClient {
             sleep(Duration::from_secs(2)).await;
         }
 
-        bail!("Timout waiting for pending")
+        bail!("Timeout waiting for pending")
     }
 
     pub async fn wait_chain_sync(&self) -> Result<()> {
@@ -238,7 +238,7 @@ impl LndClient {
             sleep(Duration::from_secs(2)).await;
         }
 
-        bail!("Time out exceded")
+        bail!("Time out exceeded")
     }
 
     pub async fn check_incoming_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
@@ -266,7 +266,7 @@ impl LndClient {
             2 => Ok(InvoiceStatus::Unpaid),
             // Accepted
             3 => Ok(InvoiceStatus::Unpaid),
-            _ => bail!("Unkown state"),
+            _ => bail!("Unknown state"),
         }
     }
 
@@ -310,7 +310,7 @@ impl LndClient {
             2 => Ok(InvoiceStatus::Unpaid),
             // Accepted
             3 => Ok(InvoiceStatus::Unpaid),
-            _ => bail!("Unkown state"),
+            _ => bail!("Unknown state"),
         }
     }
 }

@@ -298,10 +298,10 @@ impl ClnClient {
             sleep(Duration::from_secs(2)).await;
         }
 
-        bail!("Timout waiting for pending")
+        bail!("Timeout waiting for pending")
     }
 
-    pub async fn wait_channles_active(&self) -> Result<()> {
+    pub async fn wait_channels_active(&self) -> Result<()> {
         let mut count = 0;
         while count < 100 {
             let mut cln_client = self.client.lock().await;
@@ -336,7 +336,7 @@ impl ClnClient {
             };
         }
 
-        bail!("Time out exceded")
+        bail!("Time out exceeded")
     }
 
     pub async fn check_incoming_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {

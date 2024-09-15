@@ -1,4 +1,4 @@
-//! CLNd
+//! CLAnd
 
 use std::{
     path::PathBuf,
@@ -94,7 +94,7 @@ impl Clnd {
 
 impl Drop for Clnd {
     fn drop(&mut self) {
-        tracing::info!("Droping clnd");
+        tracing::info!("Dropping clnd");
         if let Err(err) = self.stop_clnd() {
             tracing::error!("Could not stop clnd: {}", err);
         }
