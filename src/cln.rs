@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 /// Clnd
 pub struct Clnd {
@@ -69,6 +69,12 @@ impl Clnd {
         sleep(Duration::from_secs(5));
 
         Ok(())
+    }
+
+    pub fn pid(&self) -> Result<u32> {
+        let child = self.child.as_ref().ok_or(anyhow!("Unknow child"))?;
+
+        Ok(child.id())
     }
 
     /// Stop clnd

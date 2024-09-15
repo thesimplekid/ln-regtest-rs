@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 /// Lnd
 pub struct Lnd {
@@ -80,6 +80,12 @@ impl Lnd {
         sleep(Duration::from_secs(10));
 
         Ok(())
+    }
+
+    pub fn pid(&self) -> Result<u32> {
+        let child = self.child.as_ref().ok_or(anyhow!("Unknow child"))?;
+
+        Ok(child.id())
     }
 
     /// Stop lnd
