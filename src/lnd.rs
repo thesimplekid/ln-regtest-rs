@@ -14,6 +14,7 @@ pub struct Lnd {
     addr: PathBuf,
     data_dir: PathBuf,
     bitcoin_data_dir: PathBuf,
+    rpc_listen: String,
     bitcoin_rpc_user: String,
     bitcoin_rpc_password: String,
     child: Option<Child>,
@@ -27,6 +28,7 @@ impl Lnd {
         bitcoin_data_dir: PathBuf,
         data_dir: PathBuf,
         addr: PathBuf,
+        rpc_listen: String,
         bitcoin_rpc_user: String,
         bitcoin_rpc_password: String,
         zmq_raw_block: String,
@@ -36,6 +38,7 @@ impl Lnd {
             data_dir,
             bitcoin_data_dir,
             addr,
+            rpc_listen,
             bitcoin_rpc_user,
             bitcoin_rpc_password,
             child: None,
@@ -62,12 +65,15 @@ impl Lnd {
         ));
         cmd.arg(format!("--bitcoind.rpcuser={}", self.bitcoin_rpc_user));
         cmd.arg(format!("--bitcoind.rpcpass={}", self.bitcoin_rpc_password));
+        cmd.arg(format!("--rpclisten={}", self.rpc_listen));
+        cmd.arg("--norest");
         cmd.arg(format!("--lnddir={}", self.data_dir.display()));
         cmd.arg(format!("--bitcoind.zmqpubrawblock={}", self.zmq_raw_block));
         cmd.arg(format!("--bitcoind.zmqpubrawtx={}", self.zmq_raw_tx));
         cmd.arg("--noseedbackup");
-
+        cmd.arg(format!("--listen={}", self.addr.to_string_lossy()));
         cmd.arg(format!("--externalip={}", self.addr.to_string_lossy()));
+        //        panic!("{}", self.addr.to_string_lossy());
 
         // Send output to dev null
         cmd.stdout(Stdio::null());

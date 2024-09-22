@@ -16,19 +16,35 @@ use crate::{hex, InvoiceStatus};
 
 /// Lnd
 pub struct LndClient {
+    pub address: String,
+    pub cert_file: PathBuf,
+    pub macaroon_file: PathBuf,
     client: Arc<Mutex<Client>>,
 }
 
 impl LndClient {
     /// Create rpc client
     pub async fn new(addr: String, cert_file: PathBuf, macaroon_file: PathBuf) -> Result<Self> {
-        let client = fedimint_tonic_lnd::connect(addr, cert_file, macaroon_file)
-            .await
-            .map_err(|_err| anyhow!("Could not connect to lnd rpc"))?;
+        let client =
+            fedimint_tonic_lnd::connect(addr.clone(), cert_file.clone(), macaroon_file.clone())
+                .await
+                .map_err(|_err| anyhow!("Could not connect to lnd rpc"))?;
 
         Ok(LndClient {
+            address: addr,
+            cert_file,
+            macaroon_file,
             client: Arc::new(Mutex::new(client)),
         })
+    }
+
+    pub async fn get_connect_info(&self) -> Result<ConnectInfo> {
+        let info = self.get_info().await?;
+        let uri = info.uris.first().unwrap();
+
+        let parsed = parse_uri(&uri);
+
+        Ok(parsed.unwrap())
     }
 
     /// Get node info
@@ -313,4 +329,35 @@ impl LndClient {
             _ => bail!("Unknown state"),
         }
     }
+}
+
+fn parse_uri(uri: &str) -> Option<ConnectInfo> {
+    // Split at the '@' symbol to separate the node_id and the rest (addr and port)
+    let parts: Vec<&str> = uri.split('@').collect();
+
+    if parts.len() != 2 {
+        return None; // If the format is invalid
+    }
+
+    let node_id = parts[0].to_string();
+    let address_parts: Vec<&str> = parts[1].split(':').collect();
+
+    if address_parts.len() != 2 {
+        return None; // If the address and port format is invalid
+    }
+
+    let addr = address_parts[0].to_string();
+    let port: u16 = address_parts[1].parse().ok()?; // Parse the port as u16
+
+    Some(ConnectInfo {
+        pubkey: node_id,
+        address: addr,
+        port,
+    })
+}
+
+pub struct ConnectInfo {
+    pub pubkey: String,
+    pub address: String,
+    pub port: u16,
 }

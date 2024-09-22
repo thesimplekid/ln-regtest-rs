@@ -236,7 +236,7 @@ impl ClnClient {
         }
     }
 
-    pub async fn pay_invoice(&self, bolt11: String) -> Result<String> {
+    pub async fn pay_invoice(&self, bolt11: String, return_error: bool) -> Result<String> {
         let mut cln_client = self.client.lock().await;
 
         let cln_response = cln_client
@@ -257,13 +257,20 @@ impl ClnClient {
             }))
             .await?;
 
-        match cln_response {
+        let response = match cln_response {
             cln_rpc::Response::Pay(pay_response) => {
                 Ok(hex::encode(pay_response.payment_preimage.to_vec()))
             }
             _ => {
                 bail!("CLN returned wrong response kind");
             }
+        };
+
+        match return_error {
+            true => {
+                bail!("Lighiting error");
+            }
+            false => response,
         }
     }
 

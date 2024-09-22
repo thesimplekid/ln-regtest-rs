@@ -56,7 +56,7 @@ impl Clnd {
             self.bitcoin_rpc_password
         ));
 
-        cmd.arg(format!("--addr={}", self.addr.to_string_lossy()));
+        cmd.arg(format!("--bind-addr={}", self.addr.to_string_lossy()));
 
         // Send output to dev null
         cmd.stdout(Stdio::null());

@@ -137,12 +137,17 @@ async fn main() -> Result<()> {
 
     let lnd_dir = temp_dir.path().join("lnd_data_dir");
 
-    let lnd_addr = PathBuf::from_str("0.0.0.0:18444")?;
+    let lnd_addr = "0.0.0.0:18444".to_string();
+    let lnd_port = 18444;
+
+    let lnd_rpc_listen = "https://127.0.0.1:10009".to_string();
 
     let mut lnd = Lnd::new(
         btc_dir,
         lnd_dir.clone(),
         lnd_addr.clone(),
+        lnd_port,
+        lnd_rpc_listen,
         btc_rpc_user,
         btc_rpc_password,
         zmq_raw_block.to_string(),
@@ -207,7 +212,7 @@ async fn main() -> Result<()> {
 
     let lnd_bolt11 = lnd_client.create_invoice(1000).await?;
 
-    let cln_preimage = cln_client.pay_invoice(lnd_bolt11).await?;
+    let cln_preimage = cln_client.pay_invoice(lnd_bolt11, false).await?;
 
     println!("preimage: {}", preimage);
     println!("cln preimage: {}", cln_preimage);
