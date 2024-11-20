@@ -6,9 +6,10 @@ use anyhow::Result;
 use ln_regtest_rs::bitcoin_client::BitcoinClient;
 use ln_regtest_rs::bitcoind::Bitcoind;
 use ln_regtest_rs::cln::Clnd;
-use ln_regtest_rs::cln_client::ClnClient;
+use ln_regtest_rs::ln_client::ClnClient;
+use ln_regtest_rs::ln_client::LightningClient;
+use ln_regtest_rs::ln_client::LndClient;
 use ln_regtest_rs::lnd::Lnd;
-use ln_regtest_rs::lnd_client::LndClient;
 use tempfile::tempdir;
 use tracing_subscriber::EnvFilter;
 
@@ -123,7 +124,7 @@ async fn main() -> Result<()> {
     cln_client.wait_chain_sync().await?;
 
     // Fund CLN one
-    let cln_one_address = cln_client.get_new_address().await.unwrap();
+    let cln_one_address = cln_client.get_new_onchain_address().await.unwrap();
     println!("CLN Address: {}", cln_one_address);
 
     bitcoin_client_spending.send_to_address(&cln_one_address, 3_000_000)?;
@@ -131,22 +132,20 @@ async fn main() -> Result<()> {
     bitcoin_client_mining.generate_blocks(&mine_to_address, 100)?;
     cln_client.wait_chain_sync().await?;
 
-    let bal = cln_client.get_balance().await?;
+    let bal = cln_client.balance().await?;
 
     println!("{:?}", bal);
 
     let lnd_dir = temp_dir.path().join("lnd_data_dir");
 
     let lnd_addr = "0.0.0.0:18444".to_string();
-    let lnd_port = 18444;
 
     let lnd_rpc_listen = "https://127.0.0.1:10009".to_string();
 
     let mut lnd = Lnd::new(
         btc_dir,
         lnd_dir.clone(),
-        lnd_addr.clone(),
-        lnd_port,
+        lnd_addr.into(),
         lnd_rpc_listen,
         btc_rpc_user,
         btc_rpc_password,
@@ -166,7 +165,7 @@ async fn main() -> Result<()> {
     let lnd_client = LndClient::new(lnd_addr, cert_file, macaroon_file).await?;
 
     // Fund LND
-    let lnd_address = lnd_client.get_new_address().await?;
+    let lnd_address = lnd_client.get_new_onchain_address().await?;
     bitcoin_client_spending.send_to_address(&lnd_address, 3_000_000)?;
     bitcoin_client_mining.generate_blocks(&mine_to_address, 10)?;
 
@@ -186,7 +185,7 @@ async fn main() -> Result<()> {
     let cln_port = 19846;
 
     lnd_client
-        .connect(cln_pubkey.to_string(), cln_address.to_string(), cln_port)
+        .connect_peer(cln_pubkey.to_string(), cln_address.to_string(), cln_port)
         .await
         .unwrap();
 
@@ -202,7 +201,7 @@ async fn main() -> Result<()> {
 
     lnd_client.wait_channels_active().await?;
 
-    let lnd_balance = lnd_client.get_balance().await?;
+    let lnd_balance = lnd_client.balance().await?;
 
     println!("{:?}", lnd_balance);
 
@@ -212,19 +211,17 @@ async fn main() -> Result<()> {
 
     let lnd_bolt11 = lnd_client.create_invoice(1000).await?;
 
-    let cln_preimage = cln_client.pay_invoice(lnd_bolt11, false).await?;
+    let cln_preimage = cln_client.pay_invoice(lnd_bolt11).await?;
 
     println!("preimage: {}", preimage);
     println!("cln preimage: {}", cln_preimage);
 
-    let channel_id = cln_client
+    cln_client
         .open_channel(1_500_000, &lnd_pubkey, None)
         .await?;
     bitcoin_client_mining.generate_blocks(&mine_to_address, 10)?;
 
     cln_client.wait_channels_active().await?;
-
-    println!("{}", channel_id);
 
     Ok(())
 }

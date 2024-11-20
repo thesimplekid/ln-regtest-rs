@@ -3,6 +3,7 @@
 use std::{path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, bail, Result};
+use async_trait::async_trait;
 use cln_rpc::{
     model::{
         requests::{
@@ -18,10 +19,14 @@ use cln_rpc::{
     primitives::{Amount, AmountOrAll, AmountOrAny, PublicKey},
     ClnRpc,
 };
-use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::sleep};
 
 use crate::{hex, InvoiceStatus};
+
+use super::{
+    types::{Balance, ConnectInfo},
+    LightningClient,
+};
 
 /// Cln
 pub struct ClnClient {
@@ -58,8 +63,74 @@ impl ClnClient {
         }
     }
 
-    /// Get new address
-    pub async fn get_new_address(&self) -> Result<String> {
+    pub async fn list_transactions(&self) -> Result<()> {
+        let client = &self.client;
+
+        let cln_response = client
+            .lock()
+            .await
+            .call(cln_rpc::Request::ListTransactions(
+                ListtransactionsRequest {},
+            ))
+            .await?;
+
+        println!("{:#?}", cln_response);
+
+        Ok(())
+    }
+
+    pub async fn list_channels(&self) -> Result<ListchannelsResponse> {
+        let mut cln_client = self.client.lock().await;
+        let cln_response = cln_client
+            .call(cln_rpc::Request::ListChannels(ListchannelsRequest {
+                destination: None,
+                short_channel_id: None,
+                source: None,
+            }))
+            .await?;
+
+        match cln_response {
+            cln_rpc::Response::ListChannels(channels) => Ok(channels),
+            _ => {
+                bail!("Wrong cln response");
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl LightningClient for ClnClient {
+    async fn get_connect_info(&self) -> Result<ConnectInfo> {
+        let client = &self.client;
+
+        let get_info_request = GetinfoRequest {};
+
+        let cln_response = client.lock().await.call(get_info_request.into()).await?;
+
+        let response = match cln_response {
+            cln_rpc::Response::Getinfo(info_response) => info_response,
+            _ => bail!("CLN returned wrong response kind"),
+        };
+
+        let address = response.address.ok_or(anyhow!("Unknow cln address"))?;
+
+        let address = address.first().ok_or(anyhow!("Unknown cln address"))?;
+
+        let port = &address.port;
+
+        let address = address
+            .address
+            .clone()
+            .ok_or(anyhow!("Address not defined"))?;
+
+        Ok(ConnectInfo {
+            pubkey: response.id.to_string(),
+            address,
+            port: *port,
+        })
+    }
+
+    async fn get_new_onchain_address(&self) -> Result<String> {
         let client = &self.client;
 
         let cln_response = client
@@ -80,8 +151,7 @@ impl ClnClient {
         Ok(address.to_string())
     }
 
-    /// Connect to peer
-    pub async fn connect(&self, pubkey: String, addr: String, port: u16) -> Result<()> {
+    async fn connect_peer(&self, pubkey: String, addr: String, port: u16) -> Result<()> {
         let client = &self.client;
 
         let cln_response = client
@@ -102,13 +172,12 @@ impl ClnClient {
         Ok(())
     }
 
-    /// Open channel to peer
-    pub async fn open_channel(
+    async fn open_channel(
         &self,
         amount_sat: u64,
         peer_id: &str,
         push_amount: Option<u64>,
-    ) -> Result<String> {
+    ) -> Result<()> {
         let client = &self.client;
 
         let cln_response = client
@@ -131,31 +200,15 @@ impl ClnClient {
             }))
             .await?;
 
-        let channel_id = match cln_response {
+        let _channel_id = match cln_response {
             cln_rpc::Response::FundChannel(addr_res) => addr_res.channel_id,
             _ => bail!("CLN returned wrong response kind"),
         };
 
-        Ok(channel_id.to_string())
-    }
-
-    pub async fn list_transactions(&self) -> Result<()> {
-        let client = &self.client;
-
-        let cln_response = client
-            .lock()
-            .await
-            .call(cln_rpc::Request::ListTransactions(
-                ListtransactionsRequest {},
-            ))
-            .await?;
-
-        println!("{:#?}", cln_response);
-
         Ok(())
     }
 
-    pub async fn get_balance(&self) -> Result<BalanceResponse> {
+    async fn balance(&self) -> Result<Balance> {
         let client = &self.client;
 
         let cln_response = client
@@ -193,10 +246,10 @@ impl ClnClient {
                     ln = ln + channel.our_amount_msat;
                 }
 
-                BalanceResponse {
-                    on_chain_spendable: Amount::from_msat(on_chain_spendable.msat()),
-                    on_chain_total: Amount::from_msat(on_chain_total.msat()),
-                    ln: Amount::from_msat(ln.msat()),
+                Balance {
+                    on_chain_spendable: on_chain_spendable.msat(),
+                    on_chain_total: on_chain_total.msat(),
+                    ln: ln.msat(),
                 }
             }
             _ => {
@@ -207,7 +260,7 @@ impl ClnClient {
         Ok(balance)
     }
 
-    pub async fn create_invoice(&self, amount: u64) -> Result<String> {
+    async fn create_invoice(&self, amount: u64) -> Result<String> {
         let mut cln_client = self.client.lock().await;
 
         let label = uuid::Uuid::new_v4().to_string();
@@ -236,7 +289,7 @@ impl ClnClient {
         }
     }
 
-    pub async fn pay_invoice(&self, bolt11: String, return_error: bool) -> Result<String> {
+    async fn pay_invoice(&self, bolt11: String) -> Result<String> {
         let mut cln_client = self.client.lock().await;
 
         let cln_response = cln_client
@@ -266,33 +319,17 @@ impl ClnClient {
             }
         };
 
-        match return_error {
-            true => {
-                bail!("Lighiting error");
-            }
-            false => response,
-        }
+        // match return_error {
+        //     true => {
+        //         bail!("Lighiting error");
+        //     }
+        //     false => response,
+        // }
+
+        response
     }
 
-    pub async fn list_channels(&self) -> Result<ListchannelsResponse> {
-        let mut cln_client = self.client.lock().await;
-        let cln_response = cln_client
-            .call(cln_rpc::Request::ListChannels(ListchannelsRequest {
-                destination: None,
-                short_channel_id: None,
-                source: None,
-            }))
-            .await?;
-
-        match cln_response {
-            cln_rpc::Response::ListChannels(channels) => Ok(channels),
-            _ => {
-                bail!("Wrong cln response");
-            }
-        }
-    }
-
-    pub async fn wait_chain_sync(&self) -> Result<()> {
+    async fn wait_chain_sync(&self) -> Result<()> {
         let mut count = 0;
         while count < 100 {
             let info = self.get_info().await?;
@@ -308,7 +345,7 @@ impl ClnClient {
         bail!("Timeout waiting for pending")
     }
 
-    pub async fn wait_channels_active(&self) -> Result<()> {
+    async fn wait_channels_active(&self) -> Result<()> {
         let mut count = 0;
         while count < 100 {
             let mut cln_client = self.client.lock().await;
@@ -346,12 +383,12 @@ impl ClnClient {
         bail!("Time out exceeded")
     }
 
-    pub async fn check_incoming_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+    async fn check_incoming_payment_status(&self, payment_hash: &str) -> Result<InvoiceStatus> {
         let mut cln_client = self.client.lock().await;
 
         let cln_response = cln_client
             .call(cln_rpc::Request::ListInvoices(ListinvoicesRequest {
-                payment_hash: Some(payment_hash),
+                payment_hash: Some(payment_hash.to_string()),
                 label: None,
                 invstring: None,
                 offer_id: None,
@@ -380,7 +417,7 @@ impl ClnClient {
         }
     }
 
-    pub async fn check_outgoing_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+    async fn check_outgoing_payment_status(&self, payment_hash: &str) -> Result<InvoiceStatus> {
         let mut cln_client = self.client.lock().await;
         let cln_response = cln_client
             .call(cln_rpc::Request::ListPays(ListpaysRequest {
@@ -410,11 +447,4 @@ impl ClnClient {
 
         Ok(state)
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BalanceResponse {
-    pub on_chain_spendable: Amount,
-    pub on_chain_total: Amount,
-    pub ln: Amount,
 }

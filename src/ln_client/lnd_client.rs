@@ -3,16 +3,22 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, bail, Result};
+use async_trait::async_trait;
 use fedimint_tonic_lnd::{
     lnrpc::{
         ConnectPeerRequest, GetInfoRequest, GetInfoResponse, LightningAddress, ListChannelsRequest,
-        NewAddressRequest, OpenChannelRequest, WalletBalanceRequest, WalletBalanceResponse,
+        NewAddressRequest, OpenChannelRequest, WalletBalanceRequest,
     },
     Client,
 };
 use tokio::{sync::Mutex, time::sleep};
 
 use crate::{hex, InvoiceStatus};
+
+use super::{
+    types::{Balance, ConnectInfo},
+    LightningClient,
+};
 
 /// Lnd
 pub struct LndClient {
@@ -38,15 +44,6 @@ impl LndClient {
         })
     }
 
-    pub async fn get_connect_info(&self) -> Result<ConnectInfo> {
-        let info = self.get_info().await?;
-        let uri = info.uris.first().unwrap();
-
-        let parsed = parse_uri(&uri);
-
-        Ok(parsed.unwrap())
-    }
-
     /// Get node info
     pub async fn get_info(&self) -> Result<GetInfoResponse> {
         let client = &self.client;
@@ -62,128 +59,6 @@ impl LndClient {
             .into_inner();
 
         Ok(info)
-    }
-
-    /// Get new address
-    pub async fn get_new_address(&self) -> Result<String> {
-        let client = &self.client;
-
-        let new_address_request = NewAddressRequest {
-            r#type: 0,
-            account: "".to_string(),
-        };
-
-        let new_address_response = client
-            .lock()
-            .await
-            .lightning()
-            .new_address(new_address_request)
-            .await?
-            .into_inner();
-
-        Ok(new_address_response.address.to_string())
-    }
-
-    /// Connect to peer
-    pub async fn connect(&self, pubkey: String, addr: String, port: u16) -> Result<()> {
-        let client = &self.client;
-
-        let host = format!("{}:{}", addr, port);
-
-        let lightning_addr = LightningAddress { pubkey, host };
-
-        let connect_peer_request = ConnectPeerRequest {
-            addr: Some(lightning_addr),
-            perm: false,
-            timeout: 60,
-        };
-
-        let _connect_peer = client
-            .lock()
-            .await
-            .lightning()
-            .connect_peer(connect_peer_request)
-            .await?
-            .into_inner();
-
-        Ok(())
-    }
-
-    /// Open channel to peer
-    pub async fn open_channel(
-        &self,
-        amount_sat: u64,
-        peer_id: &str,
-        push_amount: Option<u64>,
-    ) -> Result<()> {
-        let client = &self.client;
-
-        let mut open_channel_request = OpenChannelRequest::default();
-
-        open_channel_request.node_pubkey = hex::decode(peer_id)?;
-        open_channel_request.push_sat = push_amount.unwrap_or_default() as i64;
-        open_channel_request.local_funding_amount = amount_sat as i64;
-
-        let _connect_peer = client
-            .lock()
-            .await
-            .lightning()
-            .open_channel_sync(open_channel_request)
-            .await?
-            .into_inner();
-
-        Ok(())
-    }
-
-    pub async fn get_balance(&self) -> Result<WalletBalanceResponse> {
-        let client = &self.client;
-
-        Ok(client
-            .lock()
-            .await
-            .lightning()
-            .wallet_balance(WalletBalanceRequest {})
-            .await?
-            .into_inner())
-    }
-
-    pub async fn pay_invoice(&self, bolt11: String) -> Result<String> {
-        let pay_req = fedimint_tonic_lnd::lnrpc::SendRequest {
-            payment_request: bolt11,
-            ..Default::default()
-        };
-
-        let payment_response = self
-            .client
-            .lock()
-            .await
-            .lightning()
-            .send_payment_sync(fedimint_tonic_lnd::tonic::Request::new(pay_req))
-            .await?
-            .into_inner();
-
-        println!("{:?}", payment_response);
-
-        Ok(hex::encode(payment_response.payment_preimage))
-    }
-
-    pub async fn create_invoice(&self, amount: u64) -> Result<String> {
-        let invoice_request = fedimint_tonic_lnd::lnrpc::Invoice {
-            value_msat: (amount * 1_000) as i64,
-            ..Default::default()
-        };
-
-        let invoice = self
-            .client
-            .lock()
-            .await
-            .lightning()
-            .add_invoice(fedimint_tonic_lnd::tonic::Request::new(invoice_request))
-            .await
-            .unwrap()
-            .into_inner();
-
-        Ok(invoice.payment_request)
     }
 
     pub async fn list_channels(&self) -> Result<()> {
@@ -208,8 +83,146 @@ impl LndClient {
 
         Ok(())
     }
+}
 
-    pub async fn wait_channels_active(&self) -> Result<()> {
+#[async_trait]
+impl LightningClient for LndClient {
+    async fn get_connect_info(&self) -> Result<ConnectInfo> {
+        let info = self.get_info().await?;
+        let uri = info.uris.first().unwrap();
+
+        let parsed = parse_uri(&uri);
+
+        Ok(parsed.unwrap())
+    }
+
+    async fn get_new_onchain_address(&self) -> Result<String> {
+        let client = &self.client;
+
+        let new_address_request = NewAddressRequest {
+            r#type: 0,
+            account: "".to_string(),
+        };
+
+        let new_address_response = client
+            .lock()
+            .await
+            .lightning()
+            .new_address(new_address_request)
+            .await?
+            .into_inner();
+
+        Ok(new_address_response.address.to_string())
+    }
+
+    async fn connect_peer(&self, pubkey: String, addr: String, port: u16) -> Result<()> {
+        let client = &self.client;
+
+        let host = format!("{}:{}", addr, port);
+
+        let lightning_addr = LightningAddress { pubkey, host };
+
+        let connect_peer_request = ConnectPeerRequest {
+            addr: Some(lightning_addr),
+            perm: false,
+            timeout: 60,
+        };
+
+        let _connect_peer = client
+            .lock()
+            .await
+            .lightning()
+            .connect_peer(connect_peer_request)
+            .await?
+            .into_inner();
+
+        Ok(())
+    }
+
+    async fn open_channel(
+        &self,
+        amount_sat: u64,
+        peer_id: &str,
+        push_amount: Option<u64>,
+    ) -> Result<()> {
+        let client = &self.client;
+
+        let mut open_channel_request = OpenChannelRequest::default();
+
+        open_channel_request.node_pubkey = hex::decode(peer_id)?;
+        open_channel_request.push_sat = push_amount.unwrap_or_default() as i64;
+        open_channel_request.local_funding_amount = amount_sat as i64;
+
+        let _connect_peer = client
+            .lock()
+            .await
+            .lightning()
+            .open_channel_sync(open_channel_request)
+            .await?
+            .into_inner();
+
+        Ok(())
+    }
+
+    async fn balance(&self) -> Result<Balance> {
+        let client = &self.client;
+
+        let response = client
+            .lock()
+            .await
+            .lightning()
+            .wallet_balance(WalletBalanceRequest {})
+            .await?
+            .into_inner();
+
+        Ok(Balance {
+            on_chain_spendable: response.confirmed_balance as u64,
+            on_chain_total: response.total_balance as u64,
+            // TODO: This isnt the ln bal
+            ln: response.unconfirmed_balance as u64,
+        })
+    }
+
+    async fn pay_invoice(&self, bolt11: String) -> Result<String> {
+        let pay_req = fedimint_tonic_lnd::lnrpc::SendRequest {
+            payment_request: bolt11,
+            ..Default::default()
+        };
+
+        let payment_response = self
+            .client
+            .lock()
+            .await
+            .lightning()
+            .send_payment_sync(fedimint_tonic_lnd::tonic::Request::new(pay_req))
+            .await?
+            .into_inner();
+
+        println!("{:?}", payment_response);
+
+        Ok(hex::encode(payment_response.payment_preimage))
+    }
+
+    async fn create_invoice(&self, amount: u64) -> Result<String> {
+        let invoice_request = fedimint_tonic_lnd::lnrpc::Invoice {
+            value_msat: (amount * 1_000) as i64,
+            ..Default::default()
+        };
+
+        let invoice = self
+            .client
+            .lock()
+            .await
+            .lightning()
+            .add_invoice(fedimint_tonic_lnd::tonic::Request::new(invoice_request))
+            .await
+            .unwrap()
+            .into_inner();
+
+        Ok(invoice.payment_request)
+    }
+
+    async fn wait_channels_active(&self) -> Result<()> {
         let mut count = 0;
         while count < 100 {
             let pending = self
@@ -241,7 +254,7 @@ impl LndClient {
         bail!("Timeout waiting for pending")
     }
 
-    pub async fn wait_chain_sync(&self) -> Result<()> {
+    async fn wait_chain_sync(&self) -> Result<()> {
         let mut count = 0;
         while count < 100 {
             let info = self.get_info().await?;
@@ -257,7 +270,7 @@ impl LndClient {
         bail!("Time out exceeded")
     }
 
-    pub async fn check_incoming_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+    async fn check_incoming_payment_status(&self, payment_hash: &str) -> Result<InvoiceStatus> {
         let invoice_request = fedimint_tonic_lnd::lnrpc::PaymentHash {
             r_hash: hex::decode(payment_hash)?,
             ..Default::default()
@@ -286,7 +299,7 @@ impl LndClient {
         }
     }
 
-    pub async fn check_outgoing_invoice(&self, payment_hash: String) -> Result<InvoiceStatus> {
+    async fn check_outgoing_payment_status(&self, payment_hash: &str) -> Result<InvoiceStatus> {
         let invoice_request = fedimint_tonic_lnd::lnrpc::ListPaymentsRequest {
             include_incomplete: true,
             index_offset: 0,
@@ -354,10 +367,4 @@ fn parse_uri(uri: &str) -> Option<ConnectInfo> {
         address: addr,
         port,
     })
-}
-
-pub struct ConnectInfo {
-    pub pubkey: String,
-    pub address: String,
-    pub port: u16,
 }
