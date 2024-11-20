@@ -118,10 +118,12 @@ async fn main() -> Result<()> {
         bitcoind.stop_bitcoind().ok();
         err
     })?;
+    tracing::info!("CLN Started");
 
     let cln_client = ClnClient::new(cln_one_dir, None).await?;
 
     cln_client.wait_chain_sync().await?;
+    tracing::info!("Cln client completed chain sync");
 
     // Fund CLN one
     let cln_one_address = cln_client.get_new_onchain_address().await.unwrap();
@@ -138,9 +140,9 @@ async fn main() -> Result<()> {
 
     let lnd_dir = temp_dir.path().join("lnd_data_dir");
 
-    let lnd_addr = "0.0.0.0:18444".to_string();
+    let lnd_addr = "0.0.0.0:18449".to_string();
 
-    let lnd_rpc_listen = "https://127.0.0.1:10009".to_string();
+    let lnd_rpc_listen = "127.0.0.1:10009".to_string();
 
     let mut lnd = Lnd::new(
         btc_dir,
@@ -154,15 +156,18 @@ async fn main() -> Result<()> {
     );
 
     lnd.start_lnd()?;
+    tracing::info!("LND Started");
 
     let cert_file = lnd_dir.join("tls.cert");
     let macaroon_file = lnd_dir.join("data/chain/bitcoin/regtest/admin.macaroon");
-    println!("Creating lnd wallet ...");
 
     let lnd_addr = "https://127.0.0.1:10009".to_string();
 
-    println!("Creating lnd client ...");
     let lnd_client = LndClient::new(lnd_addr, cert_file, macaroon_file).await?;
+    tracing::info!("LND Client created");
+
+    lnd_client.wait_chain_sync().await?;
+    tracing::info!("LND Client completed chain sync");
 
     // Fund LND
     let lnd_address = lnd_client.get_new_onchain_address().await?;
@@ -178,19 +183,19 @@ async fn main() -> Result<()> {
 
     let lnd_pubkey = lnd_info.identity_pubkey;
 
-    let cln_info = cln_client.get_info().await?;
+    let cln_info = cln_client.get_connect_info().await?;
 
-    let cln_pubkey = cln_info.id;
-    let cln_address = "127.0.0.1";
-    let cln_port = 19846;
+    let cln_pubkey = cln_info.pubkey;
+    let cln_address = cln_info.address;
+    let cln_port = cln_info.port;
 
     lnd_client
-        .connect_peer(cln_pubkey.to_string(), cln_address.to_string(), cln_port)
+        .connect_peer(cln_pubkey.clone(), cln_address, cln_port)
         .await
         .unwrap();
 
     lnd_client
-        .open_channel(1_500_000, &cln_pubkey.to_string(), Some(500_000))
+        .open_channel(1_500_000, &cln_pubkey, Some(500_000))
         .await
         .unwrap();
 
