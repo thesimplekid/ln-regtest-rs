@@ -83,6 +83,31 @@ impl LndClient {
 
         Ok(())
     }
+
+    pub async fn channels_balance(&self) -> Result<u64> {
+        let channels = self
+            .client
+            .lock()
+            .await
+            .lightning()
+            .list_channels(ListChannelsRequest {
+                active_only: false,
+                inactive_only: false,
+                public_only: false,
+                private_only: false,
+                peer: vec![],
+            })
+            .await?
+            .into_inner();
+
+        let balance = channels
+            .channels
+            .iter()
+            .map(|c| c.local_balance)
+            .sum::<i64>();
+
+        Ok(balance as u64)
+    }
 }
 
 #[async_trait]
@@ -175,11 +200,12 @@ impl LightningClient for LndClient {
             .await?
             .into_inner();
 
+        let ln = self.channels_balance().await?;
+
         Ok(Balance {
             on_chain_spendable: response.confirmed_balance as u64,
             on_chain_total: response.total_balance as u64,
-            // TODO: This isnt the ln bal
-            ln: response.unconfirmed_balance as u64,
+            ln,
         })
     }
 
