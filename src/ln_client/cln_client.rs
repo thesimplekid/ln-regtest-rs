@@ -112,11 +112,11 @@ impl LightningClient for ClnClient {
             _ => bail!("CLN returned wrong response kind"),
         };
 
-        let address = response.address.ok_or(anyhow!("Unknow cln address"))?;
+        let address = response.binding.ok_or(anyhow!("Unknow cln address"))?;
 
         let address = address.first().ok_or(anyhow!("Unknown cln address"))?;
 
-        let port = &address.port;
+        let port = &address.port.ok_or(anyhow!("Unknown cln port"))?;
 
         let address = address
             .address
@@ -164,10 +164,12 @@ impl LightningClient for ClnClient {
             }))
             .await?;
 
-        let _peers = match cln_response {
+        let peer = match cln_response {
             cln_rpc::Response::Connect(connect_response) => connect_response.id,
             _ => bail!("CLN returned wrong response kind"),
         };
+
+        tracing::debug!("CLN connected to peer: {}", peer);
 
         Ok(())
     }
@@ -200,10 +202,12 @@ impl LightningClient for ClnClient {
             }))
             .await?;
 
-        let _channel_id = match cln_response {
+        let channel_id = match cln_response {
             cln_rpc::Response::FundChannel(addr_res) => addr_res.channel_id,
             _ => bail!("CLN returned wrong response kind"),
         };
+
+        tracing::info!("CLN opened channel: {}", channel_id);
 
         Ok(())
     }
@@ -335,6 +339,7 @@ impl LightningClient for ClnClient {
             let info = self.get_info().await?;
 
             if info.warning_lightningd_sync.is_none() || info.warning_bitcoind_sync.is_none() {
+                tracing::info!("CLN completed chain sync");
                 return Ok(());
             }
             count += 1;
@@ -366,6 +371,7 @@ impl LightningClient for ClnClient {
                         .collect::<Vec<_>>();
 
                     if pending.is_empty() {
+                        tracing::info!("All CLN channels active");
                         return Ok(());
                     }
 
@@ -380,7 +386,7 @@ impl LightningClient for ClnClient {
             };
         }
 
-        bail!("Time out exceeded")
+        bail!("Time out exceeded wait for cln channels")
     }
 
     async fn check_incoming_payment_status(&self, payment_hash: &str) -> Result<InvoiceStatus> {

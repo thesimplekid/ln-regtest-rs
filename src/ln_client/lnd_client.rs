@@ -161,6 +161,8 @@ impl LightningClient for LndClient {
             .await?
             .into_inner();
 
+        tracing::info!("LND connected to peer");
+
         Ok(())
     }
 
@@ -185,6 +187,8 @@ impl LightningClient for LndClient {
             .open_channel_sync(open_channel_request)
             .await?
             .into_inner();
+
+        tracing::info!("LND opened channel");
 
         Ok(())
     }
@@ -223,8 +227,6 @@ impl LightningClient for LndClient {
             .send_payment_sync(fedimint_tonic_lnd::tonic::Request::new(pay_req))
             .await?
             .into_inner();
-
-        println!("{:?}", payment_response);
 
         Ok(hex::encode(payment_response.payment_preimage))
     }
@@ -267,8 +269,7 @@ impl LightningClient for LndClient {
                 .into_inner();
 
             if pending.channels.is_empty() {
-                println!("No pending");
-                println!("{:?}", pending);
+                tracing::info!("All LND channels active");
                 return Ok(());
             }
 
@@ -286,6 +287,7 @@ impl LightningClient for LndClient {
             let info = self.get_info().await?;
 
             if info.synced_to_chain {
+                tracing::info!("LND completed chain sync");
                 return Ok(());
             }
             count += 1;
