@@ -231,9 +231,11 @@ impl LightningClient for LndClient {
         Ok(hex::encode(payment_response.payment_preimage))
     }
 
-    async fn create_invoice(&self, amount: u64) -> Result<String> {
+    async fn create_invoice(&self, amount_sat: Option<u64>) -> Result<String> {
+        let value_msat = amount_sat.map(|a| (a * 1_000) as i64).unwrap_or(0);
+
         let invoice_request = fedimint_tonic_lnd::lnrpc::Invoice {
-            value_msat: (amount * 1_000) as i64,
+            value_msat,
             ..Default::default()
         };
 

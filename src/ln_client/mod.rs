@@ -38,7 +38,7 @@ pub trait LightningClient {
     async fn pay_invoice(&self, bolt11: String) -> Result<String>;
 
     /// Create bolt11 invoice    
-    async fn create_invoice(&self, amount: u64) -> Result<String>;
+    async fn create_invoice(&self, amount_sat: Option<u64>) -> Result<String>;
 
     /// Wait for all channel to be active
     async fn wait_channels_active(&self) -> Result<()>;

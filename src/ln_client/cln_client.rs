@@ -264,12 +264,17 @@ impl LightningClient for ClnClient {
         Ok(balance)
     }
 
-    async fn create_invoice(&self, amount: u64) -> Result<String> {
+    async fn create_invoice(&self, amount_sat: Option<u64>) -> Result<String> {
         let mut cln_client = self.client.lock().await;
 
         let label = uuid::Uuid::new_v4().to_string();
 
-        let amount_msat = AmountOrAny::Amount(Amount::from_sat(amount));
+        //let amount_msat = AmountOrAny::Amount(Amount::from_sat(amount));
+
+        let amount_msat = match amount_sat {
+            Some(amount) => AmountOrAny::Amount(Amount::from_sat(amount)),
+            None => AmountOrAny::Any,
+        };
 
         let cln_response = cln_client
             .call(cln_rpc::Request::Invoice(InvoiceRequest {

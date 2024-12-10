@@ -210,11 +210,11 @@ async fn main() -> Result<()> {
 
     println!("{:?}", lnd_balance);
 
-    let bolt11 = cln_client.create_invoice(1000).await?;
+    let bolt11 = cln_client.create_invoice(Some(1000)).await?;
 
     let preimage = lnd_client.pay_invoice(bolt11).await?;
 
-    let lnd_bolt11 = lnd_client.create_invoice(1000).await?;
+    let lnd_bolt11 = lnd_client.create_invoice(Some(1000)).await?;
 
     let cln_preimage = cln_client.pay_invoice(lnd_bolt11).await?;
 
