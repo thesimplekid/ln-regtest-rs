@@ -51,4 +51,7 @@ pub trait LightningClient {
 
     /// Check outgoing invoice status
     async fn check_outgoing_payment_status(&self, payment_hash: &str) -> Result<InvoiceStatus>;
+
+    /// Pay bolt12
+    async fn pay_bolt12_offer(&self, offer: &str, amount_msats: Option<u64>) -> Result<String>;
 }
