@@ -58,6 +58,7 @@ impl Bitcoind {
         cmd.arg(format!("-rpcpassword={}", self.rpc_password));
         cmd.arg(format!("-zmqpubrawblock={}", self.zmq_raw_block));
         cmd.arg(format!("-zmqpubrawtx={}", self.zmq_raw_tx));
+        cmd.arg("-deprecatedrpc=warnings");
 
         //        cmd.arg(format!("-bind={}", self.addr.to_string_lossy()));
 
