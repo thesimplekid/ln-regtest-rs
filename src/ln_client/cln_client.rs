@@ -29,6 +29,7 @@ use super::{
 };
 
 /// Cln
+#[derive(Clone)]
 pub struct ClnClient {
     client: Arc<Mutex<ClnRpc>>,
     pub rpc_path: PathBuf,

@@ -1,5 +1,6 @@
 //! Bitcoind RPC Client
 
+use std::sync::Arc;
 use std::{path::PathBuf, str::FromStr};
 
 use anyhow::Result;
@@ -9,9 +10,10 @@ use bitcoincore_rpc::{
 };
 
 /// Bitcoin client
+#[derive(Clone)]
 pub struct BitcoinClient {
     wallet: String,
-    client: Client,
+    client: Arc<Client>,
 }
 
 impl BitcoinClient {
@@ -34,7 +36,10 @@ impl BitcoinClient {
 
         let client = Client::new(&addr.display().to_string(), auth).unwrap();
 
-        Ok(Self { client, wallet })
+        Ok(Self {
+            client: Arc::new(client),
+            wallet,
+        })
     }
 
     /// Create wallet

@@ -21,6 +21,7 @@ use super::{
 };
 
 /// Lnd
+#[derive(Clone)]
 pub struct LndClient {
     pub address: String,
     pub cert_file: PathBuf,
