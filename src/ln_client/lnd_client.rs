@@ -229,6 +229,10 @@ impl LightningClient for LndClient {
             .await?
             .into_inner();
 
+        if !payment_response.payment_error.is_empty() {
+            bail!("Lnd payment error: {}", payment_response.payment_error);
+        }
+
         Ok(hex::encode(payment_response.payment_preimage))
     }
 
