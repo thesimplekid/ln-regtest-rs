@@ -24,6 +24,7 @@ pub struct Lnd {
 
 impl Lnd {
     /// Create new [`Lnd`]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         bitcoin_data_dir: PathBuf,
         data_dir: PathBuf,

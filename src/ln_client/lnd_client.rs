@@ -117,7 +117,7 @@ impl LightningClient for LndClient {
         let info = self.get_info().await?;
         let uri = info.uris.first().unwrap();
 
-        let parsed = parse_uri(&uri);
+        let parsed = parse_uri(uri);
 
         Ok(parsed.unwrap())
     }

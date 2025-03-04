@@ -144,7 +144,7 @@ impl LightningClient for ClnClient {
 
         let address = match cln_response {
             cln_rpc::Response::NewAddr(addr_res) => {
-                &addr_res.bech32.ok_or(anyhow!("No bech32".to_string()))?
+                addr_res.bech32.ok_or(anyhow!("No bech32".to_string()))?
             }
             _ => bail!("CLN returned wrong response kind"),
         };
@@ -320,14 +320,7 @@ impl LightningClient for ClnClient {
             }))
             .await?;
 
-        let response = match cln_response {
-            cln_rpc::Response::Pay(pay_response) => {
-                Ok(hex::encode(pay_response.payment_preimage.to_vec()))
-            }
-            _ => {
-                bail!("CLN returned wrong response kind");
-            }
-        };
+        
 
         // match return_error {
         //     true => {
@@ -336,7 +329,14 @@ impl LightningClient for ClnClient {
         //     false => response,
         // }
 
-        response
+        match cln_response {
+            cln_rpc::Response::Pay(pay_response) => {
+                Ok(hex::encode(pay_response.payment_preimage.to_vec()))
+            }
+            _ => {
+                bail!("CLN returned wrong response kind");
+            }
+        }
     }
 
     async fn wait_chain_sync(&self) -> Result<()> {

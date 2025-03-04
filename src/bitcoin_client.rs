@@ -58,7 +58,7 @@ impl BitcoinClient {
         match client.load_wallet(&self.wallet) {
             Ok(_res) => Ok(()),
             Err(err) => {
-                println!("{}", err.to_string());
+                println!("{}", err);
                 Ok(())
             }
         }
