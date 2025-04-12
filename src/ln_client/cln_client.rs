@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use cln_rpc::{
     model::{
         requests::{
-            ConnectRequest, FundchannelRequest, GetinfoRequest, InvoiceRequest,
-            ListchannelsRequest, ListfundsRequest, ListinvoicesRequest, ListpaysRequest,
-            ListtransactionsRequest, NewaddrRequest, PayRequest,
+            ConnectRequest, FetchinvoiceRequest, FundchannelRequest, GetinfoRequest,
+            InvoiceRequest, ListchannelsRequest, ListfundsRequest, ListinvoicesRequest,
+            ListpaysRequest, ListtransactionsRequest, NewaddrRequest, OfferRequest, PayRequest,
         },
         responses::{
             GetinfoResponse, ListchannelsResponse, ListfundsOutputsStatus,
@@ -20,6 +20,7 @@ use cln_rpc::{
     ClnRpc,
 };
 use tokio::{sync::Mutex, time::sleep};
+use uuid::Uuid;
 
 use crate::{hex, InvoiceStatus};
 
@@ -96,6 +97,72 @@ impl ClnClient {
                 bail!("Wrong cln response");
             }
         }
+    }
+
+    pub async fn pay_bolt12_offer(
+        &self,
+        amount_msat: Option<u64>,
+        offer: String,
+    ) -> Result<String> {
+        let mut cln_client = self.client.lock().await;
+
+        let cln_response = cln_client
+            .call_typed(&FetchinvoiceRequest {
+                amount_msat: amount_msat.map(|a| Amount::from_msat(a)),
+                payer_note: None,
+                quantity: None,
+                recurrence_counter: None,
+                recurrence_label: None,
+                recurrence_start: None,
+                timeout: None,
+                offer,
+            })
+            .await?;
+
+        let invoice = cln_response.invoice;
+
+        drop(cln_client);
+
+        self.pay_invoice(invoice).await
+    }
+
+    pub async fn get_bolt12_offer(
+        &self,
+        amount_msat: Option<u64>,
+        single_use: bool,
+        description: String,
+    ) -> Result<String> {
+        let mut cln_client = self.client.lock().await;
+
+        let label = Uuid::new_v4().to_string();
+
+        // Match like this untill we change to option
+        let amount = match amount_msat {
+            Some(amount) => amount.to_string(),
+            None => "any".to_string(),
+        };
+
+        // It seems that the only way to force cln to create a unique offer
+        // is to encode some random data in the offer
+        let issuer = Uuid::new_v4().to_string();
+
+        let offer_response = cln_client
+            .call_typed(&OfferRequest {
+                amount,
+                absolute_expiry: None,
+                description,
+                issuer: Some(issuer.to_string()),
+                label: Some(label.to_string()),
+                single_use: Some(single_use),
+                quantity_max: None,
+                recurrence: None,
+                recurrence_base: None,
+                recurrence_limit: None,
+                recurrence_paywindow: None,
+            })
+            .await?;
+
+        Ok(offer_response.bolt12)
     }
 }
 
@@ -319,8 +386,6 @@ impl LightningClient for ClnClient {
                 partial_msat: None,
             }))
             .await?;
-
-        
 
         // match return_error {
         //     true => {
