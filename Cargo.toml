@@ -9,9 +9,9 @@ rust-version = "1.75.0" # MSRV
 anyhow = "1"
 async-trait = "0.1"
 bitcoincore-rpc = "0.19.0"
-cln-rpc = "0.1.9"
+cln-rpc = "0.4.0"
 fedimint-tonic-lnd = "0.2.0"
-lightning = "0.0.125"
+lightning = "0.1.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3.12.0"

@@ -117,6 +117,8 @@ impl ClnClient {
                 recurrence_start: None,
                 timeout: None,
                 offer,
+                bip353: None,
+                payer_metadata: None,
             })
             .await?;
 
@@ -151,7 +153,7 @@ impl ClnClient {
             .call_typed(&OfferRequest {
                 amount,
                 absolute_expiry: None,
-                description,
+                description: Some(description),
                 issuer: Some(issuer.to_string()),
                 label: Some(label.to_string()),
                 single_use: Some(single_use),
@@ -160,6 +162,7 @@ impl ClnClient {
                 recurrence_base: None,
                 recurrence_limit: None,
                 recurrence_paywindow: None,
+                recurrence_start_any_period: None,
             })
             .await?;
 
@@ -502,6 +505,9 @@ impl LightningClient for ClnClient {
                 bolt11: None,
                 payment_hash: Some(payment_hash.parse()?),
                 status: None,
+                index: None,
+                limit: None,
+                start: None,
             }))
             .await?;
 
@@ -545,6 +551,8 @@ impl LightningClient for ClnClient {
                 recurrence_label: None,
                 recurrence_start: None,
                 timeout: None,
+                bip353: None,
+                payer_metadata: None,
             }))
             .await;
 
