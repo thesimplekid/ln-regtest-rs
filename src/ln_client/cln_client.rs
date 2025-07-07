@@ -13,12 +13,13 @@ use cln_rpc::{
         },
         responses::{
             GetinfoResponse, ListchannelsResponse, ListfundsOutputsStatus,
-            ListinvoicesInvoicesStatus, ListpaysPaysStatus,
+            ListinvoicesInvoicesStatus, ListpaysPaysStatus, PayStatus,
         },
     },
     primitives::{Amount, AmountOrAll, AmountOrAny, PublicKey},
-    ClnRpc,
+    ClnRpc, Request,
 };
+use lightning::offers::offer::Offer;
 use tokio::{sync::Mutex, time::sleep};
 use uuid::Uuid;
 
@@ -523,5 +524,89 @@ impl LightningClient for ClnClient {
         };
 
         Ok(state)
+    }
+
+    async fn pay_bolt12_offer(&self, offer: &str, amount_msats: Option<u64>) -> Result<String> {
+        let offer = Offer::from_str(&offer).map_err(|_| anyhow!("Invalid offer"))?;
+
+        let amount = match amount_msats {
+            Some(amount) => Amount::from_msat(amount),
+            None => amount_for_offer(&offer)?,
+        };
+
+        let mut cln_client = self.client.lock().await;
+        let cln_response = cln_client
+            .call(Request::FetchInvoice(FetchinvoiceRequest {
+                amount_msat: Some(amount),
+                offer: offer.to_string(),
+                payer_note: None,
+                quantity: None,
+                recurrence_counter: None,
+                recurrence_label: None,
+                recurrence_start: None,
+                timeout: None,
+            }))
+            .await;
+
+        let invoice = match cln_response {
+            Ok(cln_rpc::Response::FetchInvoice(invoice_response)) => invoice_response.invoice,
+            c => {
+                tracing::debug!("{:?}", c);
+                tracing::error!("Error attempting to pay invoice for offer",);
+                bail!("Wrong cln response");
+            }
+        };
+
+        let cln_response = cln_client
+            .call(Request::Pay(PayRequest {
+                bolt11: invoice,
+                amount_msat: None,
+                label: None,
+                riskfactor: None,
+                maxfeepercent: None,
+                retry_for: None,
+                maxdelay: None,
+                exemptfee: None,
+                localinvreqid: None,
+                exclude: None,
+                maxfee: None,
+                description: None,
+                partial_msat: None,
+            }))
+            .await;
+
+        let response = match cln_response {
+            Ok(cln_rpc::Response::Pay(pay_response)) => {
+                match pay_response.status {
+                    PayStatus::COMPLETE => (),
+                    PayStatus::PENDING => bail!("Invoice pending"),
+                    PayStatus::FAILED => bail!("Could not pay invoice"),
+                }
+
+                pay_response.payment_preimage
+            }
+            _ => {
+                tracing::error!("Error attempting to pay invoice");
+                bail!("Could not pay bolt12 offer")
+            }
+        };
+
+        Ok(hex::encode(response.to_vec()))
+    }
+}
+
+pub fn amount_for_offer(offer: &Offer) -> Result<Amount> {
+    let offer_amount = offer.amount().ok_or(anyhow!("Amount not in offer"))?;
+
+    match offer_amount {
+        lightning::offers::offer::Amount::Bitcoin { amount_msats } => {
+            Ok(Amount::from_msat(amount_msats))
+        }
+        lightning::offers::offer::Amount::Currency {
+            iso4217_code: _,
+            amount: _,
+        } => {
+            bail!("Unsupported unit")
+        }
     }
 }
