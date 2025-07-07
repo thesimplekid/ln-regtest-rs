@@ -377,6 +377,10 @@ impl LightningClient for LndClient {
             _ => bail!("Unknown state"),
         }
     }
+
+    async fn pay_bolt12_offer(&self, _offer: &str, _amount_msats: Option<u64>) -> Result<String> {
+        todo!()
+    }
 }
 
 fn parse_uri(uri: &str) -> Option<ConnectInfo> {
